@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CookieLab — Test Your Cookies</title>
+<meta name="description" content="Developer cookie testing playground: paste any cookie list (Netscape, JSON, header), analyze expiries, flags and values. 100% client-side.">
+<style>
+:root{
+  --bg:#0a0e13; --panel:#10151d; --panel2:#0d1219; --border:#1e2733;
+  --text:#e6edf3; --dim:#8b98a9; --faint:#5b6a7d;
+  --green:#4ade80; --cyan:#22d3ee; --amber:#fbbf24; --red:#f87171; --violet:#a78bfa;
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono","Courier New",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5;min-height:100vh}
+header{border-bottom:1px solid var(--border);padding:22px 24px;background:linear-gradient(180deg,#0d1420,#0a0e13)}
+header .wrap{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{font-size:30px}
+h1{font-size:22px;letter-spacing:.5px}
+h1 .lab{color:var(--green)}
+.tag{color:var(--dim);font-size:13px;margin-top:2px}
+.privacy{margin-left:auto;font-size:12px;color:var(--green);border:1px solid #1c3a2a;background:#0d1a13;padding:6px 12px;border-radius:20px;white-space:nowrap}
+main{max-width:1200px;margin:0 auto;padding:24px}
+.tabs{display:flex;gap:8px;margin-bottom:20px}
+.tab{background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:10px 20px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600}
+.tab.active{background:#16202c;color:var(--text);border-color:var(--green)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+.panel h2{font-size:16px;margin-bottom:12px;color:var(--text)}
+.panel h2 small{color:var(--faint);font-weight:400}
+textarea#cookieInput{width:100%;min-height:180px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:12px;resize:vertical}
+textarea#cookieInput:focus{outline:none;border-color:var(--green)}
+.btnrow{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+button.btn{background:var(--green);color:#06210f;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer}
+button.btn:hover{filter:brightness(1.1)}
+button.ghost{background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600}
+button.ghost:hover{color:var(--text);border-color:var(--faint)}
+.hint{font-size:12px;color:var(--faint);margin-top:10px}
+.hint code{color:var(--cyan);font-family:var(--mono)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
+.card .n{font-size:26px;font-weight:800;font-family:var(--mono)}
+.card .l{font-size:12px;color:var(--dim);margin-top:2px}
+.card.good .n{color:var(--green)} .card.warn .n{color:var(--amber)} .card.bad .n{color:var(--red)} .card.info .n{color:var(--cyan)}
+#metaPanel{display:none}
+#metaPanel .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 20px;font-size:13px}
+#metaPanel .kv div b{color:var(--faint);font-weight:600;margin-right:6px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--faint);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.6px;padding:10px;border-bottom:1px solid var(--border)}
+td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+tr.crow{cursor:pointer}
+tr.crow:hover td{background:#131b26}
+td.mono{font-family:var(--mono);font-size:12px}
+.valprev{font-family:var(--mono);font-size:12px;color:var(--cyan);word-break:break-all;max-width:340px;display:inline-block}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:12px;font-family:var(--mono)}
+.pill.ok{background:#0d2b18;color:var(--green)} .pill.no{background:#2b1414;color:var(--red)}
+.pill.na{background:#1a2230;color:var(--faint)} .pill.warn{background:#2b2111;color:var(--amber)}
+.exp-ok{color:var(--green)} .exp-soon{color:var(--amber)} .exp-bad{color:var(--red)} .exp-sess{color:var(--violet)}
+#inspector{display:none;margin-top:16px;border:1px solid var(--border);border-radius:10px;background:var(--panel2);padding:16px}
+#inspector h3{font-size:14px;margin-bottom:10px;font-family:var(--mono);color:var(--green);word-break:break-all}
+.dec{margin-top:12px}
+.dec .dt{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--faint);margin-bottom:4px;font-weight:700}
+.dec pre{background:#080c11;border:1px solid var(--border);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow:auto;color:var(--text)}
+.copybtn{float:right;font-size:11px}
+.svc{border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;background:var(--panel2)}
+.svc .sh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.svc .domain{font-family:var(--mono);font-weight:700;color:var(--cyan);font-size:14px}
+.svc .stats{font-size:12px;color:var(--dim)}
+.authline{font-size:12px;margin-top:6px;color:var(--dim)}
+.authline code{font-family:var(--mono);color:var(--amber)}
+.empty{color:var(--faint);text-align:center;padding:30px;font-size:14px}
+#liveTable td .del{color:var(--red);cursor:pointer;background:none;border:none;font-size:14px}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.formgrid label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px;font-weight:600}
+.formgrid input,.formgrid select{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 10px;font-size:13px;font-family:var(--mono)}
+.formgrid input:focus,.formgrid select:focus{outline:none;border-color:var(--green)}
+footer{text-align:center;color:var(--faint);font-size:12px;padding:24px;border-top:1px solid var(--border);margin-top:20px}
+footer code{font-family:var(--mono);color:var(--dim)}
+@media(max-width:700px){.formgrid{grid-template-columns:1fr}.privacy{margin-left:0}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="logo">🍪</div>
+    <div>
+      <h1>Cookie<span class="lab">Lab</span></h1>
+      <div class="tag">Paste any cookie list &mdash; Claude, ChatGPT, Netflix, Perplexity, whatever &mdash; and test it like a dev.</div>
+    </div>
+    <div class="privacy">🔒 100% client-side &mdash; nothing you paste ever leaves this page</div>
+  </div>
+</header>
+<main>
+  <div class="tabs">
+    <button class="tab active" data-tab="analyze">🔬 Analyze cookie list</button>
+    <button class="tab" data-tab="live">🌐 Live: this site's cookies</button>
+  </div>
+
+  <!-- ANALYZE TAB -->
+  <div id="tab-analyze">
+    <div class="panel">
+      <h2>Paste your cookies <small>&mdash; Netscape format, JSON array, or raw Cookie header</small></h2>
+      <textarea id="cookieInput" placeholder="www.example.com&#9;FALSE&#9;/&#9;FALSE&#9;1799999999&#9;sessionid&#9;abc123...&#10;&#10;or: [{&quot;domain&quot;:&quot;...&quot;,&quot;name&quot;:&quot;...&quot;,&quot;value&quot;:&quot;...&quot;}]&#10;&#10;or: sessionid=abc123; theme=dark"></textarea>
+      <div class="btnrow">
+        <button class="btn" id="analyzeBtn">Analyze cookies</button>
+        <button class="ghost" id="sampleBtn">Load demo sample</button>
+        <button class="ghost" id="clearBtn">Clear</button>
+      </div>
+      <div class="hint">Netscape format = the classic <code>domain &rarr; subdomains &rarr; path &rarr; secure &rarr; expiry &rarr; name &rarr; value</code> tab-separated dump (curl / browser extensions / checker tools). Lines starting with <code>#HttpOnly_</code> are flagged HttpOnly. <code>#KEY : value</code> comment headers are shown as file metadata.</div>
+    </div>
+
+    <div class="panel" id="metaPanel"><h2>📄 File metadata</h2><div class="kv" id="metaKv"></div></div>
+
+    <div class="cards" id="summaryCards" style="display:none">
+      <div class="card info"><div class="n" id="cTotal">0</div><div class="l">cookies parsed</div></div>
+      <div class="card info"><div class="n" id="cDomains">0</div><div class="l">domains / services</div></div>
+      <div class="card good"><div class="n" id="cValid">0</div><div class="l">not expired</div></div>
+      <div class="card bad"><div class="n" id="cExpired">0</div><div class="l">expired</div></div>
+      <div class="card warn"><div class="n" id="cSession">0</div><div class="l">session-only</div></div>
+      <div class="card info"><div class="n" id="cSecure">0</div><div class="l">secure flag</div></div>
+      <div class="card warn"><div class="n" id="cSoon">–</div><div class="l">soonest expiry</div></div>
+      <div class="card info"><div class="n" id="cSize">0</div><div class="l">largest cookie</div></div>
+    </div>
+
+    <div class="panel" id="servicesPanel" style="display:none">
+      <h2>🧩 Services detected</h2>
+      <div id="services"></div>
+    </div>
+
+    <div class="panel" id="tablePanel" style="display:none">
+      <h2>🍪 All cookies <small>&mdash; click any row to inspect &amp; decode</small></h2>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Domain</th><th>Name</th><th>Value</th><th>Expires</th><th>Secure</th><th>HttpOnly</th><th>Size</th></tr></thead>
+        <tbody id="cookieRows"></tbody>
+      </table></div>
+      <div id="inspector">
+        <button class="ghost copybtn" id="copyVal">Copy value</button>
+        <h3 id="inspTitle"></h3>
+        <div class="dec"><div class="dt">Raw value</div><pre id="decRaw"></pre></div>
+        <div class="dec" id="decUrlWrap" style="display:none"><div class="dt">URL-decoded</div><pre id="decUrl"></pre></div>
+        <div class="dec" id="decB64Wrap" style="display:none"><div class="dt">Base64-decoded</div><pre id="decB64"></pre></div>
+        <div class="dec" id="decJwtWrap" style="display:none"><div class="dt">JWT decoded (header . payload)</div><pre id="decJwt"></pre></div>
+        <div class="dec" id="decJsonWrap" style="display:none"><div class="dt">JSON pretty-print</div><pre id="decJson"></pre></div>
+        <div class="dec"><div class="dt">Original dump line</div><pre id="decLine"></pre></div>
+      </div>
+      <div class="btnrow">
+        <button class="ghost" id="exportBtn">⬇ Export parsed as JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE TAB -->
+  <div id="tab-live" style="display:none">
+    <div class="panel">
+      <h2>🌐 Cookies on this domain <small id="liveHost"></small></h2>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Name</th><th>Value</th><th>Size</th><th></th></tr></thead>
+        <tbody id="liveRows"></tbody>
+      </table></div>
+      <div class="empty" id="liveEmpty" style="display:none">No readable cookies on this domain yet. Set one below to try it out.<br><span style="font-size:12px">Note: HttpOnly cookies are invisible to JavaScript by design.</span></div>
+      <div class="btnrow"><button class="ghost" id="liveRefresh">↻ Refresh</button></div>
+    </div>
+    <div class="panel">
+      <h2>➕ Set a test cookie on this domain</h2>
+      <div class="formgrid">
+        <div><label>Name</label><input id="lcName" placeholder="test_cookie"></div>
+        <div><label>Value</label><input id="lcValue" placeholder="hello123"></div>
+        <div><label>Expires in</label><select id="lcExp">
+          <option value="0">Session</option><option value="3600">1 hour</option>
+          <option value="86400" selected>1 day</option><option value="604800">7 days</option><option value="2592000">30 days</option>
+        </select></div>
+        <div><label>Path</label><input id="lcPath" value="/" placeholder="/"></div>
+      </div>
+      <div class="btnrow"><button class="btn" id="lcSet">Set cookie</button></div>
+      <div class="hint">Handy for testing: set a cookie here, then read it back with <code>document.cookie</code> in DevTools, or test expiry logic by setting short lifetimes.</div>
+    </div>
+  </div>
+</main>
+<footer>CookieLab &mdash; a developer playground for cookie testing. Paste, analyze, decode. <code>document.cookie</code> can only ever see the current domain &mdash; that's browser security, not a bug.</footer>
+<script>
+"use strict";
+/* ---------- utils ---------- */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+function fmtDate(epoch){ if(!epoch) return null; const d=new Date(epoch*1000); return d.toLocaleString(); }
+function relTime(epoch){
+  if(!epoch) return {t:"session",cls:"exp-sess"};
+  const diff=epoch-Math.floor(Date.now()/1000), ad=Math.abs(diff);
+  const u=ad>=86400?Math.floor(ad/86400)+"d":ad>=3600?Math.floor(ad/3600)+"h":Math.floor(ad/60)+"m";
+  if(diff<0) return {t:"expired "+u+" ago",cls:"exp-bad"};
+  if(ad<86400*3) return {t:"in "+u,cls:"exp-soon"};
+  return {t:"in "+u,cls:"exp-ok"};
+}
+function fmtBytes(n){ return n>1024?(n/1024).toFixed(1)+" KB":n+" B"; }
+function trunc(s,n){ s=String(s); return s.length>n?s.slice(0,n)+"…":s; }
+
+/* ---------- parsers ---------- */
+function parseNetscape(text){
+  const cookies=[], meta={};
+  for(let raw of text.split("\n")){
+    let line=raw.trim(); if(!line) continue;
+    if(line.startsWith("#")){
+      let httpOnly=false;
+      if(line.startsWith("#HttpOnly_")){ httpOnly=true; line=line.slice(10); }
+      else {
+        const m=line.match(/^#\s*([A-Za-z][A-Za-z0-9 _/-]*?)\s*:\s*(.+)$/);
+        if(m && !/═|━|PERPLEXITY|CHECKER|SOFTWARE|VERSION|TELEGRAM/i.test(m[1])) meta[m[1].trim()]=m[2].trim();
+        continue;
+      }
+      if(!line.trim()) continue;
+    }
+    const p=line.split("\t");
+    if(p.length<7) continue;
+    const [domain,,path,secure,expiry,name,...rest]=p;
+    cookies.push({domain:domain.trim(),path:path.trim(),secure:/^true$/i.test(secure.trim()),
+      expires:parseInt(expiry,10)||0,name:name.trim(),value:rest.join("\t"),
+      httpOnly:httpOnly?"yes":"unknown",raw:raw.trim()});
+  }
+  return {cookies,meta};
+}
+function parseJSONInput(text){
+  const arr=JSON.parse(text);
+  const list=Array.isArray(arr)?arr:(arr.cookies||[]);
+  return {cookies:list.map(c=>({domain:c.domain||"(unknown)",path:c.path||"/",
+    secure:!!c.secure,expires:c.expires||c.expirationDate||0,
+    name:c.name||"",value:String(c.value??""),
+    httpOnly:c.httpOnly===true?"yes":c.httpOnly===false?"no":"unknown",
+    raw:JSON.stringify(c)})),meta:{}};
+}
+function parseHeader(text){
+  const cookies=[];
+  for(const part of text.split(";")){
+    const i=part.indexOf("="); if(i<0) continue;
+    const name=part.slice(0,i).trim(), value=part.slice(i+1).trim();
+    if(!name) continue;
+    cookies.push({domain:location.hostname,path:"/",secure:location.protocol==="https:",
+      expires:0,name,value,httpOnly:"unknown",raw:part.trim()});
+  }
+  return {cookies,meta:{}};
+}
+function detectParse(text){
+  const t=text.trim(); if(!t) return null;
+  if(t.startsWith("{")||t.startsWith("[")){ try{ return parseJSONInput(t); }catch(e){} }
+  if(t.includes("\t")) return parseNetscape(text);
+  if(t.includes("=")) return parseHeader(text);
+  return null;
+}
+
+/* ---------- state ---------- */
+let CK=[];
+function setCookies(list){ CK=list; renderAll(); }
+
+/* ---------- render ---------- */
+function renderAll(){
+  const has=CK.length>0;
+  ["summaryCards","servicesPanel","tablePanel"].forEach(id=>$(id).style.display=has?"":"none");
+  if(!has) return;
+  const now=Math.floor(Date.now()/1000);
+  const domains=[...new Set(CK.map(c=>c.domain))];
+  const expired=CK.filter(c=>c.expires&&c.expires<now).length;
+  const session=CK.filter(c=>!c.expires).length;
+  const secure=CK.filter(c=>c.secure).length;
+  const future=CK.filter(c=>c.expires&&c.expires>=now).map(c=>c.expires);
+  const soonest=future.length?Math.min(...future):null;
+  const biggest=CK.reduce((m,c)=>Math.max(m,(c.name+"="+c.value).length),0);
+  $("cTotal").textContent=CK.length; $("cDomains").textContent=domains.length;
+  $("cValid").textContent=CK.length-expired; $("cExpired").textContent=expired;
+  $("cSession").textContent=session; $("cSecure").textContent=secure;
+  $("cSoon").textContent=soonest?relTime(soonest).t.replace("in ",""):"–";
+  $("cSize").textContent=fmtBytes(biggest);
+  renderServices(domains,now); renderTable(now);
+}
+const AUTH_RE=/(session|token|auth|jwt|sid|sess|login|user|account|identity|oauth|refresh)/i;
+function renderServices(domains,now){
+  const box=$("services"); box.innerHTML="";
+  domains.forEach(d=>{
+    const list=CK.filter(c=>c.domain===d);
+    const exp=list.filter(c=>c.expires&&c.expires<now).length;
+    const auth=list.filter(c=>AUTH_RE.test(c.name));
+    const div=document.createElement("div"); div.className="svc";
+    div.innerHTML=`<div class="sh"><span class="domain">${esc(d)}</span>
+      <span class="pill ${exp?"warn":"ok"}">${list.length} cookies</span>
+      ${exp?`<span class="pill no">${exp} expired</span>`:""}
+      ${auth.length?`<span class="pill warn">${auth.length} look like auth/session</span>`:""}</div>
+      <div class="stats">${esc(list.map(c=>c.name).slice(0,8).join(", "))}${list.length>8?" …":""}</div>
+      ${auth.map(c=>{const r=relTime(c.expires);
+        return `<div class="authline">🔑 <code>${esc(c.name)}</code> → <span class="${r.cls}">${c.expires?fmtDate(c.expires)+" ("+r.t+")":"session cookie"}</span> ${c.secure?'<span class="pill ok">Secure</span>':""} ${c.httpOnly==="yes"?'<span class="pill ok">HttpOnly</span>':""}</div>`;}).join("")}`;
+    box.appendChild(div);
+  });
+}
+function renderTable(now){
+  const tb=$("cookieRows"); tb.innerHTML="";
+  CK.forEach((c,idx)=>{
+    const r=relTime(c.expires), size=(c.name+"="+c.value).length;
+    const tr=document.createElement("tr"); tr.className="crow"; tr.dataset.i=idx;
+    tr.innerHTML=`<td class="mono">${esc(c.domain)}</td><td class="mono"><b>${esc(c.name)}</b></td>
+      <td><span class="valprev">${esc(trunc(c.value,60))}</span></td>
+      <td class="${r.cls}" style="font-size:12px;white-space:nowrap">${c.expires?esc(fmtDate(c.expires))+"<br>"+esc(r.t):'<span class="exp-sess">session</span>'}</td>
+      <td>${c.secure?'<span class="pill ok">yes</span>':'<span class="pill na">no</span>'}</td>
+      <td>${c.httpOnly==="yes"?'<span class="pill ok">yes</span>':c.httpOnly==="no"?'<span class="pill na">no</span>':'<span class="pill na">?</span>'}</td>
+      <td class="mono" style="font-size:12px">${fmtBytes(size)}${size>4096?' <span class="pill warn">big</span>':""}</td>`;
+    tr.onclick=()=>inspect(idx);
+    tb.appendChild(tr);
+  });
+}
+function renderMeta(meta){
+  const keys=Object.keys(meta), p=$("metaPanel");
+  if(!keys.length){ p.style.display="none"; return; }
+  p.style.display="";
+  $("metaKv").innerHTML=keys.map(k=>`<div><b>${esc(k)}</b>${esc(meta[k])}</div>`).join("");
+}
+
+/* ---------- decoders ---------- */
+function tryUrlDecode(v){ try{ const d=decodeURIComponent(v); return d!==v?d:null; }catch(e){ return null; } }
+function tryBase64(v){
+  const s=v.trim(); if(!/^[A-Za-z0-9+/=_-]+$/.test(s)||s.length<8||s.length%4!==0) return null;
+  try{ const b=atob(s.replace(/-/g,"+").replace(/_/g,"/"));
+    const printable=(b.match(/[\x20-\x7e\t\n\r]/g)||[]).length;
+    if(printable/b.length<0.7) return null; return b; }catch(e){ return null; }
+}
+function b64url(seg){ seg=seg.replace(/-/g,"+").replace(/_/g,"/"); while(seg.length%4) seg+="="; return atob(seg); }
+function tryJwt(v){
+  const s=v.trim(); if(!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s)) return null;
+  try{ const [h,p]=s.split(".");
+    const header=JSON.parse(b64url(h)), payload=JSON.parse(b64url(p));
+    let extra="";
+    if(payload.exp){ const e=payload.exp, r=relTime(e);
+      extra="\n\"_expires_human\": \""+fmtDate(e)+" ("+r.t+")\""; }
+    return "header:\n"+JSON.stringify(header,null,2)+"\n\npayload:\n"+JSON.stringify(payload,null,2).replace(/\}$/,","+extra+"\n}");
+  }catch(e){ return null; }
+}
+function tryJson(v){
+  let s=v.trim(); const ud=tryUrlDecode(s); if(ud&&(ud.startsWith("{")||ud.startsWith("["))) s=ud;
+  if(!(s.startsWith("{")||s.startsWith("["))) return null;
+  try{ return JSON.stringify(JSON.parse(s),null,2); }catch(e){ return null; }
+}
+let inspIdx=-1;
+function inspect(i){
+  inspIdx=i; const c=CK[i];
+  $("inspector").style.display="";
+  $("inspTitle").textContent=c.name+" @ "+c.domain;
+  $("decRaw").textContent=c.value;
+  const show=(id,wrap,val)=>{ $(wrap).style.display=val?"":"none"; if(val) $(id).textContent=val; };
+  show("decUrl","decUrlWrap",tryUrlDecode(c.value));
+  show("decB64","decB64Wrap",tryBase64(c.value));
+  show("decJwt","decJwtWrap",tryJwt(c.value));
+  show("decJson","decJsonWrap",tryJson(c.value));
+  $("decLine").textContent=c.raw||"(reconstructed)";
+  $("inspector").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+$("copyVal").onclick=()=>{ if(inspIdx>=0) navigator.clipboard.writeText(CK[inspIdx].value).then(()=>{$("copyVal").textContent="Copied ✓";setTimeout(()=>$("copyVal").textContent="Copy value",1200);}); };
+
+/* ---------- analyze actions ---------- */
+$("analyzeBtn").onclick=()=>{
+  const t=$("cookieInput").value;
+  if(!t.trim()){ alert("Paste a cookie list first."); return; }
+  const res=detectParse(t);
+  if(!res||!res.cookies.length){ alert("Couldn't parse that. Try Netscape tab-separated format, a JSON array, or a raw Cookie header."); return; }
+  renderMeta(res.meta); setCookies(res.cookies);
+};
+$("clearBtn").onclick=()=>{ $("cookieInput").value=""; setCookies([]); renderMeta({}); };
+$("exportBtn").onclick=()=>{
+  const blob=new Blob([JSON.stringify(CK.map(({raw,...r})=>r),null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="cookies-analyzed.json"; a.click(); URL.revokeObjectURL(a.href);
+};
+const SAMPLE=[
+"# Netscape HTTP Cookie File","# Demo data — totally fake, for trying the tool",
+"demo.example.com\tFALSE\t/\tFALSE\t1893456000\tsession_id\tdemo-user-12345",
+"demo.example.com\tFALSE\t/\tTRUE\t1893456000\t__Secure-auth.token\teyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkRlbW8gVXNlciIsImV4cCI6MTg5MzQ1NjAwMH0.fake-signature-for-demo",
+"demo.example.com\tFALSE\t/\tFALSE\t0\tprefs\t%7B%22theme%22%3A%22dark%22%2C%22lang%22%3A%22en%22%7D",
+"#HttpOnly_demo.example.com\tFALSE\t/\tTRUE\t1893456000\tsecret_flag\taGVsbG8td29ybGQ=",
+"old.example.com\tFALSE\t/\tFALSE\t1700000000\tstale_session\tdeadbeef1234",
+".example.com\tTRUE\t/\tTRUE\t1893456000\tshared_id\txyz-789"
+].join("\n");
+$("sampleBtn").onclick=()=>{ $("cookieInput").value=SAMPLE; $("analyzeBtn").click(); };
+
+/* ---------- live tab ---------- */
+function readLive(){
+  return document.cookie?document.cookie.split(";").map(s=>{const i=s.indexOf("=");
+    return {name:s.slice(0,i).trim(),value:s.slice(i+1).trim()};}):[];
+}
+function renderLive(){
+  $("liveHost").textContent="("+location.hostname+")";
+  const list=readLive(), tb=$("liveRows"); tb.innerHTML="";
+  $("liveEmpty").style.display=list.length?"none":"";
+  list.forEach(c=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td class="mono"><b>${esc(c.name)}</b></td>
+      <td><span class="valprev">${esc(trunc(c.value,80))}</span></td>
+      <td class="mono" style="font-size:12px">${fmtBytes((c.name+"="+c.value).length)}</td>
+      <td><button class="del" title="delete">✕</button></td>`;
+    tr.querySelector(".del").onclick=()=>{
+      document.cookie=c.name+"=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+      renderLive();
+    };
+    tb.appendChild(tr);
+  });
+}
+$("liveRefresh").onclick=renderLive;
+$("lcSet").onclick=()=>{
+  const n=$("lcName").value.trim(), v=$("lcValue").value;
+  if(!n){ alert("Give the cookie a name."); return; }
+  let str=encodeURIComponent(n)+"="+encodeURIComponent(v)+"; path="+($("lcPath").value||"/");
+  const secs=parseInt($("lcExp").value,10);
+  if(secs>0) str+="; expires="+new Date(Date.now()+secs*1000).toUTCString();
+  if(location.protocol==="https:") str+="; Secure";
+  str+="; SameSite=Lax";
+  document.cookie=str; renderLive();
+  $("lcName").value=""; $("lcValue").value="";
+};
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+  t.classList.add("active");
+  $("tab-analyze").style.display=t.dataset.tab==="analyze"?"":"none";
+  $("tab-live").style.display=t.dataset.tab==="live"?"":"none";
+  if(t.dataset.tab==="live") renderLive();
+});
+renderLive();
+</script>
+</body>
+</html>
