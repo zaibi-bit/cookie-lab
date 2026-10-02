@@ -503,6 +503,13 @@ function renderBulk(){
       ${a.auth.length?a.auth.map(c=>{const r=relTime(c.expires);
         return `<div class="authline">🔑 <code>${esc(c.name)}</code> <span style="color:var(--faint)">@ ${esc(c.domain)}</span> → <span class="${r.cls}">${c.expires?fmtDate(c.expires)+" ("+r.t+")":"session cookie"}</span></div>`;}).join("")
         :'<div class="authline">No auth/session-looking cookies detected.</div>'}
+      <div class="btnrow" style="margin-top:10px">
+        <button class="ghost" onclick="bulkAct(${i},'open')">🔗 Open ${esc(mainDomain(a))}</button>
+        <button class="ghost" onclick="bulkAct(${i},'script')">📋 Copy import script</button>
+        <button class="ghost" onclick="bulkAct(${i},'ce')">💾 Cookie-Editor JSON</button>
+        <button class="ghost" onclick="bulkAct(${i},'ns')">⬇ Netscape .txt</button>
+      </div>
+      <div class="hint">Test this login: <b>1)</b> open the site <b>2)</b> press F12 → Console → paste the import script → Enter <b>3)</b> check if you're logged in. HttpOnly cookies can't be set from the console — import the Cookie-Editor JSON with the <span class="mono">Cookie-Editor</span> browser extension instead.</div>
     </td>`;
     tr.onclick=()=>{det.style.display=det.style.display==="none"?"":"none";};
     tb.appendChild(tr); tb.appendChild(det);
@@ -523,6 +530,61 @@ $("bulkExportCsv").onclick=()=>{
 function dl(name,content,type){
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([content],{type}));
   a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500);
+}
+/* per-account login testing: browsers forbid one site from setting another
+   site's cookies, so CookieLab hands the user a direct link + import tools
+   to test the login in their own browser. */
+function mainDomain(a){
+  const counts={}; a.cookies.forEach(c=>{counts[c.domain]=(counts[c.domain]||0)+1;});
+  let best=a.domains[0],n=-1;
+  for(const d in counts) if(counts[d]>n){n=counts[d];best=d;}
+  return String(best||"").replace(/^\./,"");
+}
+function siteUrl(a){ return "https://"+mainDomain(a); }
+function importScript(a){
+  const data=a.cookies.map(c=>[
+    c.name, c.value,
+    c.expires?Math.max(1,Math.round((c.expires-Date.now()/1000)/86400)):0,
+    c.secure?1:0
+  ]);
+  const ho=a.cookies.filter(c=>c.httpOnly==="yes").length;
+  const note=ho?". Note: "+ho+" HttpOnly cookie(s) skipped - use the Cookie-Editor file for those":"";
+  return "(function(){var C="+JSON.stringify(data)+",ok=0,sk=0;"
+    +"for(var i=0;i<C.length;i++){try{"
+    +"document.cookie=encodeURIComponent(C[i][0])+\"=\"+encodeURIComponent(C[i][1])+\"; path=/\""
+    +"+(C[i][2]>0?\"; expires=\"+new Date(Date.now()+C[i][2]*864e5).toUTCString():\"\")"
+    +"+(C[i][3]&&location.protocol===\"https:\"?\"; Secure\":\"\")+\"; SameSite=Lax\";ok++;"
+    +"}catch(e){sk++;}}"
+    +"alert(\"Injected \"+ok+\" cookies\"+(sk?\", skipped \"+sk:\"\")+\""+note+". Reloading...\");"
+    +"location.reload();})();";
+}
+function cookieEditorJson(a){
+  return a.cookies.map(c=>{
+    const o={domain:c.domain,hostOnly:!c.domain.startsWith("."),httpOnly:c.httpOnly==="yes",
+      name:c.name,path:c.path||"/",sameSite:"lax",secure:!!c.secure,
+      session:!c.expires,storeId:"0",value:c.value};
+    if(c.expires) o.expirationDate=c.expires;
+    return o;
+  });
+}
+function toNetscape(a){
+  const clean=s=>String(s).replace(/[\t\n\r]/g,"");
+  return "# Netscape HTTP Cookie File\n"+a.cookies.map(c=>
+    [clean(c.domain),c.domain.startsWith(".")?"TRUE":"FALSE",clean(c.path||"/"),
+     c.secure?"TRUE":"FALSE",c.expires||0,clean(c.name),clean(c.value)].join("\t")).join("\n");
+}
+function bulkAct(i,act){
+  const a=BULK[i]; if(!a) return;
+  const slug=a.label.replace(/[^\w]+/g,"_").replace(/^_+|_+$/g,"")||"account";
+  if(act==="open"){ window.open(siteUrl(a),"_blank"); }
+  else if(act==="script"){
+    const s=importScript(a);
+    const done=()=>alert("Import script copied! Now: open "+siteUrl(a)+", press F12, go to Console, paste, hit Enter.");
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(s).then(done,()=>prompt("Copy this script:",s));
+    else prompt("Copy this script:",s);
+  }
+  else if(act==="ce"){ dl(slug+"-cookie-editor.json",JSON.stringify(cookieEditorJson(a),null,2),"application/json"); }
+  else if(act==="ns"){ dl(slug+"-cookies.txt",toNetscape(a),"text/plain"); }
 }
 
 /* ---------- tabs ---------- */
