@@ -93,6 +93,7 @@ footer code{font-family:var(--mono);color:var(--dim)}
 <main>
   <div class="tabs">
     <button class="tab active" data-tab="analyze">🔬 Analyze cookie list</button>
+    <button class="tab" data-tab="bulk">📦 Bulk checker</button>
     <button class="tab" data-tab="live">🌐 Live: this site's cookies</button>
   </div>
 
@@ -149,6 +150,34 @@ footer code{font-family:var(--mono);color:var(--dim)}
     </div>
   </div>
 
+  <!-- BULK TAB -->
+  <div id="tab-bulk" style="display:none">
+    <div class="panel">
+      <h2>📦 Bulk cookies checker <small>&mdash; check many accounts at once</small></h2>
+      <textarea id="bulkInput" placeholder="Paste multiple cookie dumps here, one after another.&#10;Each dump should start with its '# Netscape HTTP Cookie File' header line.&#10;&#10;# Netscape HTTP Cookie File&#10;...account 1 cookies...&#10;&#10;# Netscape HTTP Cookie File&#10;...account 2 cookies..."></textarea>
+      <div class="btnrow">
+        <button class="btn" id="bulkRun">Check all</button>
+        <label class="ghost" style="cursor:pointer">📁 Select .txt files<input type="file" id="bulkFiles" accept=".txt" multiple style="display:none"></label>
+        <button class="ghost" id="bulkClear">Clear</button>
+      </div>
+      <div class="hint">Each <code># Netscape HTTP Cookie File</code> block (or each selected file) is checked as one account. Account names are read from <code>#USERNAME</code> / <code>#EMAIL</code> headers when present. Verdicts are <b>heuristics</b> &mdash; expired cookies, missing auth tokens &mdash; not login guarantees.</div>
+    </div>
+    <div id="bulkResults" style="display:none">
+      <div class="cards" id="bulkCards"></div>
+      <div class="panel">
+        <h2>📋 Results <small>&mdash; click a row for detail</small></h2>
+        <div style="overflow-x:auto"><table>
+          <thead><tr><th>#</th><th>Account</th><th>Service(s)</th><th>Cookies</th><th>Expired</th><th>Auth token</th><th>Verdict</th></tr></thead>
+          <tbody id="bulkRows"></tbody>
+        </table></div>
+        <div class="btnrow">
+          <button class="ghost" id="bulkExportJson">⬇ Export JSON</button>
+          <button class="ghost" id="bulkExportCsv">⬇ Export CSV</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- LIVE TAB -->
   <div id="tab-live" style="display:none">
     <div class="panel">
@@ -199,8 +228,8 @@ function parseNetscape(text){
   const cookies=[], meta={};
   for(let raw of text.split("\n")){
     let line=raw.trim(); if(!line) continue;
+    let httpOnly=false;
     if(line.startsWith("#")){
-      let httpOnly=false;
       if(line.startsWith("#HttpOnly_")){ httpOnly=true; line=line.slice(10); }
       else {
         const m=line.match(/^#\s*([A-Za-z][A-Za-z0-9 _/-]*?)\s*:\s*(.+)$/);
@@ -337,7 +366,7 @@ function tryJson(v){
 let inspIdx=-1;
 function inspect(i){
   inspIdx=i; const c=CK[i];
-  $("inspector").style.display="";
+  $("inspector").style.display="block";
   $("inspTitle").textContent=c.name+" @ "+c.domain;
   $("decRaw").textContent=c.value;
   const show=(id,wrap,val)=>{ $(wrap).style.display=val?"":"none"; if(val) $(id).textContent=val; };
@@ -410,11 +439,98 @@ $("lcSet").onclick=()=>{
   $("lcName").value=""; $("lcValue").value="";
 };
 
+/* ---------- bulk checker ---------- */
+let BULK=[];
+function mkAccount(res,label){
+  const now=Math.floor(Date.now()/1000), meta=res.meta||{}, ck=res.cookies;
+  const name=meta["USERNAME"]||meta["USER"]||meta["EMAIL"]||meta["ACCOUNT"]||label;
+  const expired=ck.filter(c=>c.expires&&c.expires<now).length;
+  const auth=ck.filter(c=>AUTH_RE.test(c.name));
+  let verdict,cls;
+  if(expired){verdict="has expired cookies";cls="bad";}
+  else if(!auth.length){verdict="no auth token found";cls="warn";}
+  else{verdict="looks healthy";cls="good";}
+  return {label:name,src:label!==name?label:"",domains:[...new Set(ck.map(c=>c.domain))],
+    total:ck.length,expired,session:ck.filter(c=>!c.expires).length,
+    secure:ck.filter(c=>c.secure).length,auth,verdict,cls,cookies:ck,now,
+    plan:meta["PLAN"]||meta["SUBSCRIPTION TIER"]||"",daysLeft:meta["DAYS LEFT"]||meta["EXPIRE"]||""};
+}
+function readFiles(files){
+  return Promise.all([...files].map(f=>new Promise(res=>{
+    const r=new FileReader(); r.onload=()=>res({name:f.name,text:String(r.result||"")}); r.readAsText(f);
+  })));
+}
+$("bulkRun").onclick=async()=>{
+  const accounts=[]; const t=$("bulkInput").value;
+  if(t.trim()){
+    let blocks=t.split(/(?=^#\s*Netscape HTTP Cookie File)/im).map(s=>s.trim()).filter(s=>s.length>20);
+    if(blocks.length<=1&&!/^#\s*Netscape/im.test(t)) blocks=[t.trim()];
+    blocks.forEach(b=>{const r=detectParse(b);
+      if(r&&r.cookies.length) accounts.push(mkAccount(r,"Account "+(accounts.length+1)));});
+  }
+  const files=$("bulkFiles").files;
+  if(files.length){
+    (await readFiles(files)).forEach(f=>{const r=detectParse(f.text);
+      if(r&&r.cookies.length) accounts.push(mkAccount(r,f.name));});
+  }
+  if(!accounts.length){alert("Nothing parseable found. Paste dumps (each starting with '# Netscape HTTP Cookie File') or select .txt files.");return;}
+  BULK=accounts; renderBulk();
+};
+$("bulkClear").onclick=()=>{$("bulkInput").value="";$("bulkFiles").value="";BULK=[];$("bulkResults").style.display="none";};
+function renderBulk(){
+  $("bulkResults").style.display="";
+  const good=BULK.filter(a=>a.cls==="good").length, bad=BULK.filter(a=>a.cls!=="good").length;
+  $("bulkCards").innerHTML=
+    `<div class="card info"><div class="n">${BULK.length}</div><div class="l">accounts checked</div></div>`+
+    `<div class="card good"><div class="n">${good}</div><div class="l">look healthy</div></div>`+
+    `<div class="card ${bad?"bad":"info"}"><div class="n">${bad}</div><div class="l">with issues</div></div>`+
+    `<div class="card info"><div class="n">${BULK.reduce((s,a)=>s+a.total,0)}</div><div class="l">total cookies</div></div>`;
+  const tb=$("bulkRows"); tb.innerHTML="";
+  BULK.forEach((a,i)=>{
+    const soonAuth=a.auth.filter(c=>!c.expires||c.expires>=a.now)
+      .sort((x,y)=>(x.expires||9e12)-(y.expires||9e12))[0];
+    const tr=document.createElement("tr"); tr.className="crow";
+    tr.innerHTML=`<td class="mono">${i+1}</td>
+      <td><b>${esc(a.label)}</b>${a.src?`<br><span style="font-size:11px;color:var(--faint)">${esc(a.src)}</span>`:""}${a.plan?`<br><span class="pill info" style="font-size:10px">${esc(a.plan)}</span>`:""}</td>
+      <td class="mono" style="font-size:12px">${esc(a.domains.slice(0,2).join("<br>"))}${a.domains.length>2?`<br>+${a.domains.length-2} more`:""}</td>
+      <td class="mono">${a.total}</td>
+      <td>${a.expired?`<span class="pill no">${a.expired}</span>`:'<span class="pill ok">0</span>'}</td>
+      <td class="mono" style="font-size:12px">${soonAuth?esc(trunc(soonAuth.name,28))+(soonAuth.expires?`<br><span class="${relTime(soonAuth.expires).cls}">${relTime(soonAuth.expires).t}</span>`:'<span class="exp-sess">session</span>'):'<span style="color:var(--faint)">—</span>'}</td>
+      <td><span class="pill ${a.cls==="good"?"ok":a.cls==="warn"?"warn":"no"}">${esc(a.verdict)}</span></td>`;
+    const det=document.createElement("tr"); det.style.display="none";
+    det.innerHTML=`<td></td><td colspan="6" style="background:var(--panel2)">
+      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">${a.total} cookies · ${a.session} session · ${a.secure} secure · domains: <span class="mono">${esc(a.domains.join(", "))}</span>${a.daysLeft?` · <b style="color:var(--amber)">${esc(a.daysLeft)}</b>`:""}</div>
+      ${a.auth.length?a.auth.map(c=>{const r=relTime(c.expires);
+        return `<div class="authline">🔑 <code>${esc(c.name)}</code> <span style="color:var(--faint)">@ ${esc(c.domain)}</span> → <span class="${r.cls}">${c.expires?fmtDate(c.expires)+" ("+r.t+")":"session cookie"}</span></div>`;}).join("")
+        :'<div class="authline">No auth/session-looking cookies detected.</div>'}
+    </td>`;
+    tr.onclick=()=>{det.style.display=det.style.display==="none"?"":"none";};
+    tb.appendChild(tr); tb.appendChild(det);
+  });
+  $("bulkResults").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+$("bulkExportJson").onclick=()=>{
+  const data=BULK.map(({cookies,...a})=>({...a,auth:a.auth.map(c=>({name:c.name,domain:c.domain,expires:c.expires,secure:c.secure}))}));
+  dl("bulk-check.json",JSON.stringify(data,null,2),"application/json");
+};
+$("bulkExportCsv").onclick=()=>{
+  const q=s=>'"'+String(s??"").replace(/"/g,'""')+'"';
+  const rows=[["#","account","source","domains","cookies","expired","session","secure","auth_tokens","verdict"]];
+  BULK.forEach((a,i)=>rows.push([i+1,a.label,a.src,a.domains.join(";"),a.total,a.expired,a.session,a.secure,
+    a.auth.map(c=>c.name+(c.expires?" (exp "+fmtDate(c.expires)+")":" (session)")).join("; "),a.verdict]));
+  dl("bulk-check.csv",rows.map(r=>r.map(q).join(",")).join("\n"),"text/csv");
+};
+function dl(name,content,type){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500);
+}
+
 /* ---------- tabs ---------- */
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
   t.classList.add("active");
   $("tab-analyze").style.display=t.dataset.tab==="analyze"?"":"none";
+  $("tab-bulk").style.display=t.dataset.tab==="bulk"?"":"none";
   $("tab-live").style.display=t.dataset.tab==="live"?"":"none";
   if(t.dataset.tab==="live") renderLive();
 });
