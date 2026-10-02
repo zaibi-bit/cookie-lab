@@ -62,6 +62,12 @@ td.mono{font-family:var(--mono);font-size:12px}
 .dec .dt{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--faint);margin-bottom:4px;font-weight:700}
 .dec pre{background:#080c11;border:1px solid var(--border);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow:auto;color:var(--text)}
 .copybtn{float:right;font-size:11px}
+#scriptModal{position:fixed;inset:0;z-index:50}
+.sm-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.7)}
+.sm-box{position:relative;max-width:640px;margin:8vh auto;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px}
+.sm-box h3{font-size:15px;margin-bottom:8px}
+.sm-box h3 small{color:var(--faint);font-weight:400}
+#scriptBox{width:100%;min-height:160px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--cyan);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical}
 .svc{border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;background:var(--panel2)}
 .svc .sh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .svc .domain{font-family:var(--mono);font-weight:700;color:var(--cyan);font-size:14px}
@@ -205,6 +211,18 @@ footer code{font-family:var(--mono);color:var(--dim)}
     </div>
   </div>
 </main>
+<div id="scriptModal" style="display:none">
+  <div class="sm-backdrop" onclick="closeScriptModal()"></div>
+  <div class="sm-box">
+    <h3>📋 Import script <small id="smSite"></small></h3>
+    <div class="hint" style="margin:0 0 8px">Open the site, press F12 → Console, paste this, hit Enter. It injects the cookies and reloads the page.</div>
+    <textarea id="scriptBox" readonly></textarea>
+    <div class="btnrow">
+      <button class="btn" id="scriptCopy">Copy to clipboard</button>
+      <button class="ghost" onclick="closeScriptModal()">Close</button>
+    </div>
+  </div>
+</div>
 <footer>CookieLab &mdash; a developer playground for cookie testing. Paste, analyze, decode. <code>document.cookie</code> can only ever see the current domain &mdash; that's browser security, not a bug.</footer>
 <script>
 "use strict";
@@ -577,15 +595,26 @@ function bulkAct(i,act){
   const a=BULK[i]; if(!a) return;
   const slug=a.label.replace(/[^\w]+/g,"_").replace(/^_+|_+$/g,"")||"account";
   if(act==="open"){ window.open(siteUrl(a),"_blank"); }
-  else if(act==="script"){
-    const s=importScript(a);
-    const done=()=>alert("Import script copied! Now: open "+siteUrl(a)+", press F12, go to Console, paste, hit Enter.");
-    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(s).then(done,()=>prompt("Copy this script:",s));
-    else prompt("Copy this script:",s);
-  }
+  else if(act==="script"){ openScriptModal(importScript(a),siteUrl(a)); }
   else if(act==="ce"){ dl(slug+"-cookie-editor.json",JSON.stringify(cookieEditorJson(a),null,2),"application/json"); }
   else if(act==="ns"){ dl(slug+"-cookies.txt",toNetscape(a),"text/plain"); }
 }
+
+/* ---------- script modal ---------- */
+function openScriptModal(script,site){
+  $("scriptBox").value=script; $("smSite").textContent="for "+site;
+  $("scriptCopy").textContent="Copy to clipboard";
+  $("scriptModal").style.display="";
+}
+function closeScriptModal(){ $("scriptModal").style.display="none"; }
+$("scriptCopy").onclick=()=>{
+  const t=$("scriptBox"); t.select();
+  const ok=()=>{$("scriptCopy").textContent="Copied ✓";};
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(t.value).then(ok,()=>{try{document.execCommand("copy");}catch(e){} ok();});
+  else{ try{document.execCommand("copy");}catch(e){} ok(); }
+};
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeScriptModal();});
 
 /* ---------- tabs ---------- */
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
