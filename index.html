@@ -213,15 +213,7 @@ footer code{font-family:var(--mono);color:var(--dim)}
 </main>
 <div id="scriptModal" style="display:none">
   <div class="sm-backdrop" onclick="closeScriptModal()"></div>
-  <div class="sm-box">
-    <h3>📋 Import script <small id="smSite"></small></h3>
-    <div class="hint" style="margin:0 0 8px">Open the site, press F12 → Console, paste this, hit Enter. It injects the cookies and reloads the page.</div>
-    <textarea id="scriptBox" readonly></textarea>
-    <div class="btnrow">
-      <button class="btn" id="scriptCopy">Copy to clipboard</button>
-      <button class="ghost" onclick="closeScriptModal()">Close</button>
-    </div>
-  </div>
+  <div class="sm-box" id="smBox"></div>
 </div>
 <footer>CookieLab &mdash; a developer playground for cookie testing. Paste, analyze, decode. <code>document.cookie</code> can only ever see the current domain &mdash; that's browser security, not a bug.</footer>
 <script>
@@ -534,6 +526,7 @@ function renderBulk(){
         :'<div class="authline">No auth/session-looking cookies detected.</div>'}
       <div class="btnrow" style="margin-top:10px">
         <button class="ghost" onclick="bulkAct(${i},'open')">🔗 Open ${esc(mainDomain(a))}</button>
+        <button class="ghost" onclick="bulkAct(${i},'login')">🔑 Login link</button>
         <button class="ghost" onclick="bulkAct(${i},'script')">📋 Copy import script</button>
         <button class="ghost" onclick="bulkAct(${i},'ce')">💾 Cookie-Editor JSON</button>
         <button class="ghost" onclick="bulkAct(${i},'ns')">⬇ Netscape .txt</button>
@@ -606,25 +599,43 @@ function bulkAct(i,act){
   const a=BULK[i]; if(!a) return;
   const slug=a.label.replace(/[^\w]+/g,"_").replace(/^_+|_+$/g,"")||"account";
   if(act==="open"){ window.open(siteUrl(a),"_blank"); }
+  else if(act==="login"){ openLoginModal(a); }
   else if(act==="script"){ openScriptModal(importScript(a),siteUrl(a)); }
   else if(act==="ce"){ dl(slug+"-cookie-editor.json",JSON.stringify(cookieEditorJson(a),null,2),"application/json"); }
   else if(act==="ns"){ dl(slug+"-cookies.txt",toNetscape(a),"text/plain"); }
 }
 
 /* ---------- script modal ---------- */
-function openScriptModal(script,site){
-  $("scriptBox").value=script; $("smSite").textContent="for "+site;
-  $("scriptCopy").textContent="Copy to clipboard";
-  $("scriptModal").style.display="";
-}
+function showModal(html){ $("smBox").innerHTML=html; $("scriptModal").style.display=""; }
 function closeScriptModal(){ $("scriptModal").style.display="none"; }
-$("scriptCopy").onclick=()=>{
-  const t=$("scriptBox"); t.select();
-  const ok=()=>{$("scriptCopy").textContent="Copied ✓";};
-  if(navigator.clipboard&&navigator.clipboard.writeText)
-    navigator.clipboard.writeText(t.value).then(ok,()=>{try{document.execCommand("copy");}catch(e){} ok();});
-  else{ try{document.execCommand("copy");}catch(e){} ok(); }
-};
+function openScriptModal(script,site){
+  showModal(`<h3>📋 Import script <small>for ${esc(site)}</small></h3>
+    <div class="hint" style="margin:0 0 8px">Open the site, press F12 → Console, paste this, hit Enter. It injects the cookies and reloads the page.</div>
+    <textarea id="scriptBox" readonly></textarea>
+    <div class="btnrow"><button class="btn" id="scriptCopy">Copy to clipboard</button>
+    <button class="ghost" onclick="closeScriptModal()">Close</button></div>`);
+  $("scriptBox").value=script;
+  $("scriptCopy").onclick=()=>{
+    const t=$("scriptBox"); t.select();
+    const ok=()=>{$("scriptCopy").textContent="Copied ✓";};
+    if(navigator.clipboard&&navigator.clipboard.writeText)
+      navigator.clipboard.writeText(t.value).then(ok,()=>{try{document.execCommand("copy");}catch(e){} ok();});
+    else{ try{document.execCommand("copy");}catch(e){} ok(); }
+  };
+}
+/* Direct-login bookmarklet: a draggable link per account. Browsers won't let
+   any page set another site's cookies, so a bare link can never log you in —
+   the bookmarklet runs ON the site (one click) which is allowed. */
+function openLoginModal(a){
+  const email=a.label, site=siteUrl(a), dom=mainDomain(a);
+  const href="javascript:"+encodeURIComponent(importScript(a));
+  const tooLong=href.length>8000;
+  showModal(`<h3>🔑 Direct login <small>${esc(email)}</small></h3>
+    <div class="hint" style="margin:0 0 8px"><b>Drag</b> this button up to your bookmarks bar (one-time setup):</div>
+    <div style="margin:12px 0"><a class="btn" style="text-decoration:none;display:inline-block" href="${href}">🔑 Login as ${esc(trunc(email,26))}</a></div>
+    <div class="hint">Then: <b>1)</b> open <b>${esc(dom)}</b> <b>2)</b> click the bookmark → you're logged in as ${esc(email)}.${tooLong?`<br><span style="color:var(--amber)">This one is long (${Math.round(href.length/1024)} KB) — if the bookmark fails, use the console import script instead.</span>`:""}<br>If it doesn't log you in, the session cookie is HttpOnly — use the 💾 Cookie-Editor JSON with the Cookie-Editor extension instead.</div>
+    <div class="btnrow"><button class="ghost" onclick="closeScriptModal()">Close</button></div>`);
+}
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeScriptModal();});
 
 /* ---------- subscription intel ----------
