@@ -470,7 +470,7 @@ function mkAccount(res,label){
   else{verdict="looks healthy";cls="good";}
   return {label:name,src:label!==name?label:"",domains:[...new Set(ck.map(c=>c.domain))],
     total:ck.length,expired,session:ck.filter(c=>!c.expires).length,
-    secure:ck.filter(c=>c.secure).length,auth,verdict,cls,cookies:ck,now,
+    secure:ck.filter(c=>c.secure).length,auth,verdict,cls,cookies:ck,now,meta,
     plan:meta["PLAN"]||meta["SUBSCRIPTION TIER"]||"",daysLeft:meta["DAYS LEFT"]||meta["EXPIRE"]||""};
 }
 function readFiles(files){
@@ -498,10 +498,12 @@ $("bulkClear").onclick=()=>{$("bulkInput").value="";$("bulkFiles").value="";BULK
 function renderBulk(){
   $("bulkResults").style.display="";
   const good=BULK.filter(a=>a.cls==="good").length, bad=BULK.filter(a=>a.cls!=="good").length;
+  const expSoon=BULK.filter(a=>{const d=daysLeft(extractSubscription(a).expires);return d!==null&&d<=7;}).length;
   $("bulkCards").innerHTML=
     `<div class="card info"><div class="n">${BULK.length}</div><div class="l">accounts checked</div></div>`+
     `<div class="card good"><div class="n">${good}</div><div class="l">look healthy</div></div>`+
     `<div class="card ${bad?"bad":"info"}"><div class="n">${bad}</div><div class="l">with issues</div></div>`+
+    `<div class="card ${expSoon?"warn":"info"}"><div class="n">${expSoon}</div><div class="l">subs expiring ≤7d</div></div>`+
     `<div class="card info"><div class="n">${BULK.reduce((s,a)=>s+a.total,0)}</div><div class="l">total cookies</div></div>`;
   const tb=$("bulkRows"); tb.innerHTML="";
   BULK.forEach((a,i)=>{
@@ -517,7 +519,8 @@ function renderBulk(){
       <td><span class="pill ${a.cls==="good"?"ok":a.cls==="warn"?"warn":"no"}">${esc(a.verdict)}</span></td>`;
     const det=document.createElement("tr"); det.style.display="none";
     det.innerHTML=`<td></td><td colspan="6" style="background:var(--panel2)">
-      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">${a.total} cookies · ${a.session} session · ${a.secure} secure · domains: <span class="mono">${esc(a.domains.join(", "))}</span>${a.daysLeft?` · <b style="color:var(--amber)">${esc(a.daysLeft)}</b>`:""}</div>
+      ${subBox(a)}
+      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">${a.total} cookies · ${a.session} session · ${a.secure} secure · domains: <span class="mono">${esc(a.domains.join(", "))}</span></div>
       ${a.auth.length?a.auth.map(c=>{const r=relTime(c.expires);
         return `<div class="authline">🔑 <code>${esc(c.name)}</code> <span style="color:var(--faint)">@ ${esc(c.domain)}</span> → <span class="${r.cls}">${c.expires?fmtDate(c.expires)+" ("+r.t+")":"session cookie"}</span></div>`;}).join("")
         :'<div class="authline">No auth/session-looking cookies detected.</div>'}
@@ -615,6 +618,61 @@ $("scriptCopy").onclick=()=>{
   else{ try{document.execCommand("copy");}catch(e){} ok(); }
 };
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeScriptModal();});
+
+/* ---------- subscription intel ----------
+   Honest scope: cookies can't prove subscription status — the service's
+   servers are the ground truth. This surfaces every subscription hint the
+   data already contains: #PLAN/#STATUS/#EXPIRE file headers, plus plan
+   claims inside JWT/JSON cookie values. Days-left is always computed
+   from today's date, never trusted from a stale header. */
+function jwtPayload(v){
+  const s=String(v).trim();
+  if(!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(s)) return null;
+  try{let b=s.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");
+    while(b.length%4)b+="="; return JSON.parse(atob(b));}catch(e){return null;}
+}
+function extractSubscription(a){
+  const meta=a.meta||{}, out={plan:"",status:"",expires:"",sources:[]};
+  const mget=(...ks)=>{for(const k of ks){if(meta[k]&&String(meta[k]).trim())return String(meta[k]).trim();}return "";};
+  const plan=mget("PLAN","SUBSCRIPTION TIER","TIER");
+  if(plan){out.plan=plan;out.sources.push("file header");}
+  const status=mget("SUBSCRIPTION STATUS","STATUS");
+  if(status){out.status=status;out.sources.push("file header");}
+  const exp=mget("EXPIRE","EXPIRES","EXPIRY","SUBSCRIPTION EXPIRES");
+  if(exp){out.expires=exp;out.sources.push("file header");}
+  const KEYRE=/(plan|tier|subscription|premium|entitlement|membership)/i;
+  const VALRE=/pro|plus|premium|team|enterprise|trial|paid|active/i;
+  a.cookies.forEach(c=>{
+    let obj=null,src="";
+    const jp=jwtPayload(c.value);
+    if(jp){obj=jp;src="JWT "+c.name;}
+    if(!obj){const j=tryJson(c.value); if(j){try{obj=JSON.parse(j);src="cookie "+c.name;}catch(e){}}}
+    if(obj&&typeof obj==="object"){
+      for(const k of Object.keys(obj)){
+        if(KEYRE.test(k)&&!out.plan&&VALRE.test(String(obj[k]))){
+          out.plan=String(obj[k]); out.sources.push(src+" → "+k);
+        }
+      }
+    }
+  });
+  return out;
+}
+function daysLeft(expStr){
+  const m=String(expStr||"").match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return null;
+  return Math.ceil((new Date(+m[1],+m[2]-1,+m[3])-new Date())/864e5);
+}
+function subBox(a){
+  const s=extractSubscription(a);
+  if(!s.plan&&!s.status&&!s.expires)
+    return `<div class="authline" style="margin-bottom:8px">💳 <span style="color:var(--faint)">No subscription info found in this data — check the account on its site to be sure.</span></div>`;
+  const dl=daysLeft(s.expires);
+  const dlHtml=s.expires?(dl===null?"":dl<0?` <span class="pill no">expired ${-dl}d ago</span>`:dl===0?` <span class="pill warn">expires today</span>`:` <span class="pill ${dl<=7?"warn":"ok"}">${dl} days left</span>`):"";
+  return `<div style="margin:0 0 8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel)">
+    <div style="font-size:13px">💳 Subscription: <b>${esc(s.plan||"—")}</b>${s.status?` · <span style="color:var(--dim)">${esc(s.status)}</span>`:""}${s.expires?` · expires <b>${esc(s.expires)}</b>${dlHtml}`:""}</div>
+    <div style="font-size:11px;color:var(--faint);margin-top:2px">Source: ${esc(s.sources.join("; "))} · days-left computed from today, not the file's old stamp</div>
+  </div>`;
+}
 
 /* ---------- tabs ---------- */
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
