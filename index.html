@@ -461,9 +461,15 @@ $("lcSet").onclick=()=>{
 
 /* ---------- bulk checker ---------- */
 let BULK=[];
+function mgetCI(meta,...ks){
+  const lower={};
+  for(const k of Object.keys(meta||{})) lower[k.toLowerCase()]=meta[k];
+  for(const k of ks){const v=lower[String(k).toLowerCase()];if(v&&String(v).trim())return String(v).trim();}
+  return "";
+}
 function mkAccount(res,label){
   const now=Math.floor(Date.now()/1000), meta=res.meta||{}, ck=res.cookies;
-  const name=meta["USERNAME"]||meta["USER"]||meta["EMAIL"]||meta["ACCOUNT"]||label;
+  const name=mgetCI(meta,"USERNAME","USER","EMAIL","ACCOUNT")||label;
   const expired=ck.filter(c=>c.expires&&c.expires<now).length;
   const auth=ck.filter(c=>AUTH_RE.test(c.name));
   let verdict,cls;
@@ -522,7 +528,7 @@ function renderBulk(){
     const det=document.createElement("tr"); det.style.display="none";
     det.innerHTML=`<td></td><td colspan="6" style="background:var(--panel2)">
       ${subBox(a)}
-      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">${a.total} cookies · ${a.session} session · ${a.secure} secure · domains: <span class="mono">${esc(a.domains.join(", "))}</span></div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">${a.total} cookies · ${a.session} session · ${a.secure} secure · domains: <span class="mono">${esc(a.domains.join(", "))}</span>${(()=>{const c=mgetCI(a.meta,"country");return c?` · country: <b>${esc(c)}</b>`:"";})()}</div>
       ${a.auth.length?a.auth.map(c=>{const r=relTime(c.expires);
         return `<div class="authline">🔑 <code>${esc(c.name)}</code> <span style="color:var(--faint)">@ ${esc(c.domain)}</span> → <span class="${r.cls}">${c.expires?fmtDate(c.expires)+" ("+r.t+")":"session cookie"}</span></div>`;}).join("")
         :'<div class="authline">No auth/session-looking cookies detected.</div>'}
@@ -635,8 +641,8 @@ function jwtPayload(v){
 }
 function extractSubscription(a){
   const meta=a.meta||{}, out={plan:"",status:"",expires:"",sources:[]};
-  const mget=(...ks)=>{for(const k of ks){if(meta[k]&&String(meta[k]).trim())return String(meta[k]).trim();}return "";};
-  const plan=mget("PLAN","Plan","SUBSCRIPTION TIER","TIER");
+  const mget=(...ks)=>mgetCI(meta,...ks);
+  const plan=mget("PLAN","SUBSCRIPTION TIER","TIER");
   if(plan){out.plan=plan;out.sources.push("file header");}
   const status=mget("SUBSCRIPTION STATUS","STATUS");
   if(status){out.status=status;out.sources.push("file header");}
