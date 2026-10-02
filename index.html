@@ -256,6 +256,8 @@ function parseNetscape(text){
       }
       if(!line.trim()) continue;
     }
+    const mh=line.match(/^[–—-]\s*([A-Za-z][A-Za-z0-9 ]*?)\s*:\s*(.*)$/);
+    if(mh){ meta[mh[1].trim()]=mh[2].trim(); continue; }
     const p=line.split("\t");
     if(p.length<7) continue;
     const [domain,,path,secure,expiry,name,...rest]=p;
@@ -317,7 +319,7 @@ function renderAll(){
   $("cSize").textContent=fmtBytes(biggest);
   renderServices(domains,now); renderTable(now);
 }
-const AUTH_RE=/(session|token|auth|jwt|sid|sess|login|user|account|identity|oauth|refresh)/i;
+const AUTH_RE=/(session|token|auth|jwt|sid|sess|login|user|account|identity|oauth|refresh|netflixid)/i;
 function renderServices(domains,now){
   const box=$("services"); box.innerHTML="";
   domains.forEach(d=>{
@@ -634,11 +636,11 @@ function jwtPayload(v){
 function extractSubscription(a){
   const meta=a.meta||{}, out={plan:"",status:"",expires:"",sources:[]};
   const mget=(...ks)=>{for(const k of ks){if(meta[k]&&String(meta[k]).trim())return String(meta[k]).trim();}return "";};
-  const plan=mget("PLAN","SUBSCRIPTION TIER","TIER");
+  const plan=mget("PLAN","Plan","SUBSCRIPTION TIER","TIER");
   if(plan){out.plan=plan;out.sources.push("file header");}
   const status=mget("SUBSCRIPTION STATUS","STATUS");
   if(status){out.status=status;out.sources.push("file header");}
-  const exp=mget("EXPIRE","EXPIRES","EXPIRY","SUBSCRIPTION EXPIRES");
+  const exp=mget("EXPIRE","EXPIRES","EXPIRY","SUBSCRIPTION EXPIRES","Next billing","Next Billing");
   if(exp){out.expires=exp;out.sources.push("file header");}
   const KEYRE=/(plan|tier|subscription|premium|entitlement|membership)/i;
   const VALRE=/pro|plus|premium|team|enterprise|trial|paid|active/i;
